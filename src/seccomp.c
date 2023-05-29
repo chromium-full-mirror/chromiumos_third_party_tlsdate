@@ -132,6 +132,11 @@ enable_setter_seccomp (void)
     SC_ALLOW(rseq),
 #endif
 
+#ifdef __NR_send
+    SC_ALLOW (send), /* needed for calling info() from tlsdate-setter */
+#endif
+
+    SC_ALLOW (sendto), /* needed for calling info() from tlsdate-setter */
     SC_ALLOW (lseek),
     SC_ALLOW (close),
     SC_ALLOW (munmap),
