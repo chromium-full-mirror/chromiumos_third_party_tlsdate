@@ -21,6 +21,8 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 CONFIG_EXTRA
 
+AC_SYS_LARGEFILE
+
 dnl Here we should build a small program to fetch the build system time in a portable
 dnl manner. We have no Win32 users, we can fix this if we ever find one that
 dnl cares.
