@@ -28,10 +28,13 @@ AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <time.h>]])],
                   [AC_DEFINE_UNQUOTED([_TIME_BITS], [64], [Enable 64-bit time_t if available])])
 CPPFLAGS="$save_CPPFLAGS"
 
+dnl NB: Keep in sync with platform2/init/startup/constants.h.
+MIN_YEAR="2023"
+
 dnl Here we should build a small program to fetch the build system time in a portable
 dnl manner. We have no Win32 users, we can fix this if we ever find one that
 dnl cares.
-COMPILE_DATE=`date +%s`
+COMPILE_DATE=`date -d "1 Jan ${MIN_YEAR}" +%s`
 AC_SUBST([COMPILE_DATE])
 AC_DEFINE_UNQUOTED([RECENT_COMPILE_DATE],
                    [${COMPILE_DATE}L],
