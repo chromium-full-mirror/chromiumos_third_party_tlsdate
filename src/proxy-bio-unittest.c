@@ -5,6 +5,8 @@
  * found in the LICENSE file.
  */
 
+#include "config.h"
+
 #include <alloca.h>
 
 #include "src/proxy-bio.h"
