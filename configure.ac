@@ -45,6 +45,9 @@ MAX_DATE=`date -d "1 Jan ${MAX_YEAR}" +%s`
 AC_DEFINE_UNQUOTED([TLSDATED_MAX_DATE],
                    [${MAX_DATE}L],
                    [Max time in seconds since the Disco epoch at build time])
+AC_DEFINE_UNQUOTED([MAX_REASONABLE_TIME],
+                   [${MAX_DATE}L],
+                   [Max time in seconds since the Disco epoch at build time])
 
 dnl Build up the directory we will use to install certs
 TLSDATE_CA_ROOTS="${sysconfdir}/$PACKAGE_NAME/ca-roots"
