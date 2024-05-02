@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use chromeos_dbus_bindings::{self, generate_module, BindingsType};
+use chromeos_dbus_bindings::{generate_module, BindingsType};
 
 const SOURCE_DIR: &str = ".";
 
