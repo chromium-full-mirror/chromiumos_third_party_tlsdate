@@ -29,7 +29,7 @@ AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <time.h>]])],
 CPPFLAGS="$save_CPPFLAGS"
 
 dnl NB: Keep in sync with platform2/init/startup/constants.h.
-MIN_YEAR="2023"
+MIN_YEAR="2024"
 MAX_YEAR=$(( MIN_YEAR + 15 ))
 
 dnl Here we should build a small program to fetch the build system time in a portable
