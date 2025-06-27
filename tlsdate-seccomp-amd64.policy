@@ -34,6 +34,7 @@ rt_sigaction: 1
 exit_group: 1
 rt_sigprocmask: 1
 clone: 1
+clone3: 1
 # Allow request == RTC_SET_TIME || request == FIONREAD
 ioctl: arg1 == 0x4024700a || arg1 == 0x541b
 getuid: 1
