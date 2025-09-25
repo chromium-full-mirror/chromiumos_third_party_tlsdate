@@ -26,30 +26,33 @@
 static const char kMatchFormat[] = "interface='%s',member='%s',arg0='%s'";
 static const char kMatchNoArgFormat[] = "interface='%s',member='%s'";
 
+static const char kDBusInterface[] = "org.freedesktop.DBus";
+static const char kNameOwnerChanged[] = "NameOwnerChanged";
+static const char kNameAcquired[] = "NameAcquired";
+
+static const char kErrorServiceUnknown[] =
+    "org.freedesktop.DBus.Error.ServiceUnknown";
+
+// The source of truth for the subsequent constants is
+// src/platform2/system_api/dbus/shill/dbus-constants.h
 static const char kProxyServiceName[] = "org.chromium.NetworkProxyService";
 static const char kProxyServicePath[] = "/org/chromium/NetworkProxyService";
 static const char kProxyServiceInterface[] =
     "org.chromium.NetworkProxyServiceInterface";
 static const char kProxyServiceResolveProxyMethod[] = "ResolveProxy";
 
-static const char kDBusInterface[] = "org.freedesktop.DBus";
-static const char kNameOwnerChanged[] = "NameOwnerChanged";
-static const char kNameAcquired[] = "NameAcquired";
-
 static const char kManagerInterface[] = "org.chromium.flimflam.Manager";
-
 static const char kServiceInterface[] = "org.chromium.flimflam.Service";
 static const char kMember[] = "PropertyChanged";
 
 static const char kProxyConfig[] = "ProxyConfig";
+static const char kServiceState[] = "State";
+static const char kServiceStateOnline[] = "online";
 static const char kDefaultService[] = "DefaultService";
 
 /* TODO(wad) Integrate with cros_system_api/dbus/service_constants.h */
 static const char kPowerManagerInterface[] = "org.chromium.PowerManager";
 static const char kSuspendDone[] = "SuspendDone";
-
-static const char kErrorServiceUnknown[] =
-    "org.freedesktop.DBus.Error.ServiceUnknown";
 
 struct platform_state
 {
@@ -62,13 +65,66 @@ struct platform_state
 
 static
 DBusHandlerResult
+handle_proxy_config_change (struct platform_state *ctx,
+                            const char *service,
+                            DBusMessageIter *iter)
+{
+  DBusMessageIter subiter;
+  const char *pval;
+
+  if (!dbus_message_iter_next (iter))
+    return DBUS_HANDLER_RESULT_HANDLED;
+  if (dbus_message_iter_get_arg_type (iter) != DBUS_TYPE_VARIANT)
+    return DBUS_HANDLER_RESULT_HANDLED;
+  dbus_message_iter_recurse (iter, &subiter);
+  if (dbus_message_iter_get_arg_type (&subiter) != DBUS_TYPE_STRING)
+    return DBUS_HANDLER_RESULT_HANDLED;
+  dbus_message_iter_get_basic (&subiter, &pval);
+  /* Right now, nothing is done with the Shill proxy value because
+   * Chromium handles .pac resolution.  This may be more useful for
+   * ignoring incomplete proxy values sent while a user is typing.
+   */
+
+  info ("[event:cros:%s]: proxy config change for service %s",
+        __func__, service);
+  action_kickoff_time_sync (-1, EV_TIMEOUT, ctx->state);
+  return DBUS_HANDLER_RESULT_HANDLED;
+}
+
+static
+DBusHandlerResult
+handle_service_state_change (struct platform_state *ctx,
+                             const char *service,
+                             DBusMessageIter *iter)
+{
+  DBusMessageIter subiter;
+  const char *pval;
+
+  if (!dbus_message_iter_next (iter))
+    return DBUS_HANDLER_RESULT_HANDLED;
+  if (dbus_message_iter_get_arg_type (iter) != DBUS_TYPE_VARIANT)
+    return DBUS_HANDLER_RESULT_HANDLED;
+  dbus_message_iter_recurse (iter, &subiter);
+  if (dbus_message_iter_get_arg_type (&subiter) != DBUS_TYPE_STRING)
+    return DBUS_HANDLER_RESULT_HANDLED;
+  dbus_message_iter_get_basic (&subiter, &pval);
+  if (strcmp (pval, kServiceStateOnline) != 0)
+    return DBUS_HANDLER_RESULT_HANDLED;
+
+  info ("[event:cros:%s]: state '%s' for service '%s'",
+        __func__, pval, service);
+  action_kickoff_time_sync (-1, EV_TIMEOUT, ctx->state);
+  return DBUS_HANDLER_RESULT_HANDLED;
+}
+
+static
+DBusHandlerResult
 handle_service_change (DBusConnection *connection,
                        DBusMessage *message,
                        struct platform_state *ctx)
 {
-  DBusMessageIter iter, subiter;
+  DBusMessageIter iter;
   const char *pname;
-  const char *pval;
   const char *service;
   debug ("[event:cros:%s]: fired", __func__);
   /* TODO(wad) Track the current DefaultService only fire when it changes */
@@ -81,22 +137,13 @@ handle_service_change (DBusConnection *connection,
   if (dbus_message_iter_get_arg_type (&iter) != DBUS_TYPE_STRING)
     return DBUS_HANDLER_RESULT_HANDLED;
   dbus_message_iter_get_basic (&iter, &pname);
-  /* Make sure we are only firing on a ProxyConfig property change. */
-  if (strcmp (pname, kProxyConfig))
-    return DBUS_HANDLER_RESULT_HANDLED;
-  if (!dbus_message_iter_next (&iter))
-    return DBUS_HANDLER_RESULT_HANDLED;
-  if (dbus_message_iter_get_arg_type (&iter) != DBUS_TYPE_VARIANT)
-    return DBUS_HANDLER_RESULT_HANDLED;
-  dbus_message_iter_recurse (&iter, &subiter);
-  if (dbus_message_iter_get_arg_type (&subiter) != DBUS_TYPE_STRING)
-    return DBUS_HANDLER_RESULT_HANDLED;
-  dbus_message_iter_get_basic (&subiter, &pval);
-  /* Right now, nothing is done with the Shill proxy value because
-   * Chromium handles .pac resolution.  This may be more useful for
-   * ignoring incomplete proxy values sent while a user is typing.
-   */
-  action_kickoff_time_sync (-1, EV_TIMEOUT, ctx->state);
+  /* Make sure we are only firing on a ProxyConfig or State property change. */
+  if (strcmp (pname, kProxyConfig) == 0) {
+    return handle_proxy_config_change(ctx, service, &iter);
+  }
+  if (strcmp (pname, kServiceState) == 0) {
+    return handle_service_state_change(ctx, service, &iter);
+  }
   return DBUS_HANDLER_RESULT_HANDLED;
 }
 
@@ -393,7 +440,8 @@ platform_init_cros (struct state *state)
   /* Add watches for: proxy changes, default service changes,
    * NetworkProxyService ownership, and power state changes.
    */
-  if (add_match (conn, kServiceInterface, kMember, kProxyConfig) ||
+  if (add_match (conn, kServiceInterface, kMember, kServiceState) ||
+      add_match (conn, kServiceInterface, kMember, kProxyConfig) ||
       add_match (conn, kManagerInterface, kMember, kDefaultService) ||
       add_match (conn, kDBusInterface, kNameOwnerChanged, kProxyServiceName) ||
       add_match (conn, kPowerManagerInterface, kSuspendDone, NULL))
