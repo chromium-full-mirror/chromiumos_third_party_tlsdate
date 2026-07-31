@@ -199,9 +199,6 @@ time_setter_coprocess (int time_fd, int notify_fd, struct state *state)
                   status = SETTER_SET_ERR;
                   goto notify_and_die;
                 }
-              else
-                info ("tlsdate-setter: system time updated to %lu.%09lu",
-                      tv.tv_sec, tv.tv_usec);
               if (state->opts.should_sync_hwclock &&
                   sync_hwclock (state->hwclock_fd, tv.tv_sec))
                 {
