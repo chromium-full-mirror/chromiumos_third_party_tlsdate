@@ -98,5 +98,8 @@ uint32_t check_wildcard_match_rfc2595 (const char *orig_hostname,
 long long check_rtt (const struct tlsdate_time *start_time,
                      const struct tlsdate_time *end_time,
                      uint32_t server_time_s);
+void init_server_time (uint32_t server_time_s,
+                       long long rt_time_ms,
+                       struct tlsdate_time *server_time);
 
 #endif

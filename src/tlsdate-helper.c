@@ -981,6 +981,16 @@ check_rtt (const struct tlsdate_time *start_time,
   return rt_time_ms;
 }
 
+void
+init_server_time (uint32_t server_time_s,
+                  long long rt_time_ms,
+                  struct tlsdate_time *server_time)
+{
+  clock_init_time (server_time,
+                   server_time_s + (rt_time_ms / 2 / 1000),
+                   ((rt_time_ms / 2) % 1000) * 1000000L);
+}
+
 /** drop root rights and become 'nobody' */
 
 #ifdef TLSDATE_HELPER_UNITTEST
@@ -1117,8 +1127,7 @@ main (int argc, char **argv)
   if (setclock)
     {
       struct tlsdate_time server_time;
-      clock_init_time (&server_time,  server_time_s + (rt_time_ms / 2 / 1000),
-                       (rt_time_ms / 2) % 1000);
+      init_server_time (server_time_s, rt_time_ms, &server_time);
       // We should never receive a time that is before the time we were last
       // compiled; we subscribe to the linear theory of time for this program
       // and this program alone!

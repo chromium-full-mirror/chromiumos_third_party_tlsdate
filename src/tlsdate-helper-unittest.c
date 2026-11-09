@@ -179,4 +179,28 @@ TEST (rtt_suspend_across_handshake_dies)
              run_check_rtt (&start_time, &end_time, 1793930606, &rt_time_ms));
 }
 
+TEST (init_server_time_subsecond_nanoseconds)
+{
+  struct tlsdate_time server_time;
+
+  /* 88 ms RTT -> half-RTT is 44 ms = 44,000,000 ns. */
+  init_server_time (1793892188, 88, &server_time);
+  EXPECT_EQ (1793892188, CLOCK_SEC (&server_time));
+  EXPECT_EQ (44, CLOCK_MSEC (&server_time));
+  EXPECT_EQ (44000, CLOCK_USEC (&server_time));
+  EXPECT_EQ (44000000L, CLOCK_NSEC (&server_time));
+}
+
+TEST (init_server_time_multi_second_rtt)
+{
+  struct tlsdate_time server_time;
+
+  /* 5,320 ms RTT -> half-RTT is 2,660 ms = 2 s + 660,000,000 ns. */
+  init_server_time (1793892188, 5320, &server_time);
+  EXPECT_EQ (1793892190, CLOCK_SEC (&server_time));
+  EXPECT_EQ (660, CLOCK_MSEC (&server_time));
+  EXPECT_EQ (660000, CLOCK_USEC (&server_time));
+  EXPECT_EQ (660000000L, CLOCK_NSEC (&server_time));
+}
+
 TEST_HARNESS_MAIN
