@@ -8,6 +8,9 @@
   * \brief Header file for the clock primitives.
   **/
 
+#ifndef TLSDATE_COMPAT_CLOCK_H
+#define TLSDATE_COMPAT_CLOCK_H
+
 #ifdef __linux__
 
 #ifdef HAVE_TIME_H
@@ -63,3 +66,4 @@ void clock_init_time_win (struct tlsdate_time *time, time_t sec,
 #define CLOCK_NSEC(time)
 
 #endif /* __linux__ _WIN32 */
+#endif /* TLSDATE_COMPAT_CLOCK_H */

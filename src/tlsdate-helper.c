@@ -952,10 +952,44 @@ run_ssl (uint32_t *time_map, int time_is_an_illusion)
   SSL_CTX_free (ctx);
 }
 
+long long
+check_rtt (const struct tlsdate_time *start_time,
+           const struct tlsdate_time *end_time,
+           uint32_t server_time_s)
+{
+  long long rt_time_ms;
+  rt_time_ms = ((long long) (CLOCK_SEC (end_time) - CLOCK_SEC (start_time)) *
+                1000000LL +
+                (CLOCK_USEC (end_time) - CLOCK_USEC (start_time))) / 1000LL;
+  if (rt_time_ms < 0)
+    rt_time_ms = 0; /* non-linear time... */
+  verb ("V: server time %u (difference is about %d s) was fetched in %lld ms\n",
+        (unsigned int) server_time_s,
+        (int) (CLOCK_SEC (start_time) - server_time_s),
+        rt_time_ms);
+  /*
+   * Fail if the handshake took too long (b/582991618). For example, if the
+   * device suspends after sending ClientHello and resumes minutes later to
+   * receive ServerHello, rt_time_ms includes the suspend duration and would
+   * otherwise jump the system clock into the future by rt_time_ms / 2.
+   */
+  if (rt_time_ms > TLS_RTT_THRESHOLD)
+    {
+      die ("the TLS handshake took more than %d msecs - consider using a "
+           "different server or run it again\n", TLS_RTT_THRESHOLD);
+    }
+  return rt_time_ms;
+}
+
 /** drop root rights and become 'nobody' */
 
+#ifdef TLSDATE_HELPER_UNITTEST
+int
+tlsdate_helper_main (int argc, char **argv)
+#else
 int
 main (int argc, char **argv)
+#endif
 {
   uint32_t *time_map;
   struct tlsdate_time start_time, end_time, warp_time;
@@ -1059,22 +1093,10 @@ main (int argc, char **argv)
     die ("child process failed in SSL handshake\n");
   if (0 != clock_get_real_time (&end_time))
     die ("Failed to read current time of day: %s\n", strerror (errno));
-  /* calculate RTT */
-  rt_time_ms = (CLOCK_SEC (&end_time) - CLOCK_SEC (&start_time)) * 1000 + (CLOCK_USEC (&end_time) - CLOCK_USEC (&start_time)) / 1000;
-  if (rt_time_ms < 0)
-    rt_time_ms = 0; /* non-linear time... */
   server_time_s = ntohl (*time_map);
   munmap (time_map, sizeof (uint32_t));
-  verb ("V: server time %u (difference is about %d s) was fetched in %lld ms\n",
-        (unsigned int) server_time_s,
-        CLOCK_SEC (&start_time) - server_time_s,
-        rt_time_ms);
-  /* warning if the handshake took too long */
-  if (rt_time_ms > TLS_RTT_THRESHOLD)
-    {
-      verb ("V: the TLS handshake took more than %d msecs - consider using a different " \
-            "server or run it again\n", TLS_RTT_THRESHOLD);
-    }
+  /* calculate and verify RTT */
+  rt_time_ms = check_rtt (&start_time, &end_time, server_time_s);
   if (showtime_raw)
     {
       fwrite (&server_time_s, sizeof (server_time_s), 1, stdout);

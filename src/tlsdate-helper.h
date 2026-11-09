@@ -34,6 +34,8 @@
 #include <openssl/conf.h>
 #include <openssl/x509v3.h>
 
+#include "src/compat/clock.h"
+
 /** Name of user that we feel safe to run SSL handshake with. */
 #ifndef UNPRIV_USER
 #define UNPRIV_USER "nobody"
@@ -66,8 +68,11 @@
 #define MAX_ECC_PUB_KEY_LEN (uint32_t) 521
 #endif
 // After the duration of the TLS handshake exceeds this threshold
-// (in msec), a warning is printed.
-#define TLS_RTT_THRESHOLD      2000
+// (in msec), the time sync fails (see b/582991618). Note that if a
+// brief suspend occurs across the handshake, the synced timestamp
+// can be stale by up to TLS_RTT_THRESHOLD when tlsdate-helper is
+// invoked with -Vraw/-n by tlsdated.
+#define TLS_RTT_THRESHOLD      5000
 
 // RFC 5280 says...
 // ub-common-name-length INTEGER ::= 64
@@ -87,9 +92,11 @@ uint32_t check_name (SSL *ssl, const char *hostname);
 uint32_t verify_signature (SSL *ssl, const char *hostname);
 void check_key_length (SSL *ssl);
 void inspect_key (SSL *ssl, const char *hostname);
-static void run_ssl (uint32_t *time_map, int time_is_an_illusion);
 uint32_t dns_label_count (char *label, char *delim);
 uint32_t check_wildcard_match_rfc2595 (const char *orig_hostname,
                                        const char *orig_cert_wild_card);
+long long check_rtt (const struct tlsdate_time *start_time,
+                     const struct tlsdate_time *end_time,
+                     uint32_t server_time_s);
 
 #endif

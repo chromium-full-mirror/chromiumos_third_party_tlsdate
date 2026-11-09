@@ -33,6 +33,16 @@ src_tlsdate_helper_SOURCES = src/tlsdate-helper.c
 src_tlsdate_helper_SOURCES+= src/proxy-bio.c
 src_tlsdate_helper_SOURCES+= src/util.c
 
+src_tlsdate_helper_unittest_CPPFLAGS = -DTLSDATE_HELPER_UNITTEST
+src_tlsdate_helper_unittest_LDADD = -lssl -lcrypto
+src_tlsdate_helper_unittest_LDADD+= src/compat/libtlsdate_compat.la
+src_tlsdate_helper_unittest_SOURCES = src/tlsdate-helper.c
+src_tlsdate_helper_unittest_SOURCES+= src/tlsdate-helper-unittest.c
+src_tlsdate_helper_unittest_SOURCES+= src/proxy-bio.c
+src_tlsdate_helper_unittest_SOURCES+= src/util.c
+check_PROGRAMS+= src/tlsdate-helper_unittest
+noinst_PROGRAMS+= src/tlsdate-helper_unittest
+
 src_tlsdated_CFLAGS = $(DBUS_CFLAGS) $(LIBEVENT_CFLAGS)
 src_tlsdated_CPPFLAGS = -DTLSDATED_MAIN -DWITH_EVENTS
 if SECCOMP_FILTER_DEBUG

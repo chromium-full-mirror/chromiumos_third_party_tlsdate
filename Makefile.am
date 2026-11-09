@@ -13,6 +13,7 @@ noinst_PROGRAMS=
 
 # GNU style is "make check", this will make check and test work
 TESTS+= src/conf_unittest src/tlsdated_unittest src/proxy-bio_unittest
+TESTS+= src/tlsdate-helper_unittest
 if HAVE_CROS
 TESTS+= src/platform-cros-util_unittest
 endif
@@ -129,4 +130,3 @@ src/configmake.h: ${top_srcdir}/Makefile.in
 	  else \
 	  mv $@-t $@ ; \
 	  fi
-

@@ -73,7 +73,10 @@ int read_time (const char *path, time_t* time)
 TEST (sane_time)
 {
   ASSERT_EQ (0, is_sane_time (0));
-  ASSERT_EQ (0, is_sane_time (INT_MAX));
+  ASSERT_EQ (0, is_sane_time (RECENT_COMPILE_DATE));
+  ASSERT_EQ (1, is_sane_time (RECENT_COMPILE_DATE + 1));
+  ASSERT_EQ (1, is_sane_time (TLSDATED_MAX_DATE - 1));
+  ASSERT_EQ (0, is_sane_time (TLSDATED_MAX_DATE));
 }
 
 TEST (sane_host_time)
@@ -90,7 +93,7 @@ TEST_F (tempdir, load_time)
   ASSERT_EQ (0, write_time (buf, 0));
   ASSERT_EQ (-1, load_disk_timestamp (buf, &tm));
   ASSERT_EQ (3, tm);
-  ASSERT_EQ (0, write_time (buf, INT_MAX));
+  ASSERT_EQ (0, write_time (buf, TLSDATED_MAX_DATE));
   ASSERT_EQ (-1, load_disk_timestamp (buf, &tm));
   ASSERT_EQ (3, tm);
   ASSERT_EQ (0, write_time (buf, now));
