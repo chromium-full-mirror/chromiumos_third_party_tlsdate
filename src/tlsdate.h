@@ -51,6 +51,10 @@
 #define DEFAULT_DRY_RUN 0
 #define DEFAULT_RUN_ONCE 0
 #define MAX_SANE_BACKOFF (10*60) /* exponential backoff should only go this far */
+/* Maximum allowed CLOCK_BOOTTIME duration (in msec) from spawning tlsdate to
+ * completing time setting in tlsdated. Matches TLS_RTT_THRESHOLD (b/582991618).
+ */
+#define MAX_SYNC_DURATION_MS 5000
 
 #ifndef TLSDATED_MAX_DATE
 #define TLSDATED_MAX_DATE 1999991337L /* this'll be a great bug some day */
@@ -159,6 +163,7 @@ struct state
   time_t clock_delta;
   int last_sync_type;
   time_t last_time;
+  struct timespec last_sync_start;
 
   char timestamp_path[PATH_MAX];
   int hwclock_fd;
@@ -192,6 +197,9 @@ int read_tlsdate_response (int fd, time_t *t);
 
 void invalidate_time (struct state *state);
 int check_continuity (time_t *delta);
+int check_sync_duration (const struct state *state, long long *elapsed_ms_out);
+void reset_and_retrigger_sync (struct state *state);
+void handle_time_setter (struct state *state, int status);
 
 void action_check_continuity (int fd, short what, void *arg);
 void action_kickoff_time_sync (int fd, short what, void *arg);

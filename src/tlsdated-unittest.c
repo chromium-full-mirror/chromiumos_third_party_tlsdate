@@ -309,4 +309,113 @@ TEST_F (tlsdate, proxy_override)
   EXPECT_EQ (0, runner (self, NULL));
   EXPECT_EQ (RECENT_COMPILE_DATE + 2, self->state.last_time);
 }
+
+TEST_F (tlsdate, status_discards_stale_sync_and_retriggers)
+{
+  struct source source =
+  {
+    .next = NULL,
+    .host = "host1",
+    .port = "port1",
+    .proxy = "proxy1"
+  };
+  char *args[] = { "src/test/check-host-1", NULL };
+  uint32_t stale_time = RECENT_COMPILE_DATE + 50;
+  struct timespec now;
+  extern char **environ;
+
+  self->state.opts.sources = &source;
+  self->state.opts.base_argv = args;
+  self->state.opts.subprocess_tries = 2;
+  self->state.opts.subprocess_wait_between_tries = 1;
+  self->state.opts.max_tries = 3;
+  self->state.envp = environ;
+  self->state.last_sync_type = SYNC_TYPE_NONE;
+  self->state.last_time = 0;
+  self->state.clock_delta = 100;
+
+  /* Simulate a sync that started MAX_SYNC_DURATION_MS + 1000 ms ago in
+   * CLOCK_BOOTTIME (e.g. system suspended after tlsdate-helper wrote to
+   * stdout and before action_tlsdate_status read the pipe).
+   */
+  ASSERT_EQ (0, clock_gettime (CLOCK_BOOTTIME, &now));
+  self->state.last_sync_start.tv_sec =
+      now.tv_sec - (MAX_SYNC_DURATION_MS / 1000) - 1;
+  self->state.last_sync_start.tv_nsec = now.tv_nsec;
+
+  ASSERT_EQ ((ssize_t) sizeof (stale_time),
+             write (self->state.tlsdate_monitor_fd, &stale_time,
+                    sizeof (stale_time)));
+  action_tlsdate_status (event_get_fd (self->state.events[E_TLSDATE_STATUS]),
+                         EV_READ, &self->state);
+
+  /* Stale response must be rejected and a fresh sync scheduled. */
+  EXPECT_EQ (SYNC_TYPE_RTC, self->state.last_sync_type);
+  EXPECT_EQ (0, self->state.clock_delta);
+  EXPECT_NE ((time_t) stale_time, self->state.last_time);
+  EXPECT_NE (0, event_pending (self->state.events[E_TLSDATE],
+                               EV_TIMEOUT, NULL));
+
+  /* Dispatch the re-triggered sync and verify it succeeds with fresh time. */
+  event_base_loopexit (self->state.base, &self->timeout);
+  ASSERT_EQ (0, event_base_dispatch (self->state.base));
+  EXPECT_EQ (SYNC_TYPE_NET, self->state.last_sync_type);
+  EXPECT_EQ (RECENT_COMPILE_DATE + 1, self->state.last_time);
+}
+
+TEST_F (tlsdate, setter_retriggers_sync_when_total_duration_exceeded)
+{
+  struct source source =
+  {
+    .next = NULL,
+    .host = "host1",
+    .port = "port1",
+    .proxy = "proxy1"
+  };
+  char *args[] = { "src/test/check-host-1", NULL };
+  struct timespec now;
+  extern char **environ;
+
+  self->state.opts.sources = &source;
+  self->state.opts.cur_source = &source;
+  self->state.opts.base_argv = args;
+  self->state.opts.subprocess_tries = 2;
+  self->state.opts.subprocess_wait_between_tries = 1;
+  self->state.opts.max_tries = 3;
+  self->state.envp = environ;
+  self->state.last_sync_type = SYNC_TYPE_NET;
+  self->state.last_time = RECENT_COMPILE_DATE + 50;
+  self->state.clock_delta = 100;
+
+  /* Simulate a suspend occurring between action_tlsdate_status and
+   * settimeofday() completing in tlsdated-setter.
+   */
+  ASSERT_EQ (0, clock_gettime (CLOCK_BOOTTIME, &now));
+  self->state.last_sync_start.tv_sec =
+      now.tv_sec - (MAX_SYNC_DURATION_MS / 1000) - 1;
+  self->state.last_sync_start.tv_nsec = now.tv_nsec;
+
+  handle_time_setter (&self->state, SETTER_TIME_SET);
+  EXPECT_EQ (SYNC_TYPE_RTC, self->state.last_sync_type);
+  EXPECT_EQ (0, self->state.clock_delta);
+  EXPECT_EQ (&source, self->state.opts.cur_source);
+  EXPECT_NE (0, event_pending (self->state.events[E_TLSDATE],
+                               EV_TIMEOUT, NULL));
+
+  /* Dispatch the re-triggered sync, then verify handle_time_setter accepts
+   * the fresh sync and resets cur_source.
+   */
+  event_base_loopexit (self->state.base, &self->timeout);
+  ASSERT_EQ (0, event_base_dispatch (self->state.base));
+  EXPECT_EQ (SYNC_TYPE_NET, self->state.last_sync_type);
+  EXPECT_EQ (RECENT_COMPILE_DATE + 1, self->state.last_time);
+
+  handle_time_setter (&self->state, SETTER_TIME_SET);
+  EXPECT_EQ (SYNC_TYPE_NET, self->state.last_sync_type);
+  EXPECT_EQ (NULL, self->state.opts.cur_source);
+  EXPECT_EQ (0, self->state.last_sync_start.tv_sec);
+  EXPECT_EQ (0, self->state.last_sync_start.tv_nsec);
+  EXPECT_EQ (0, event_pending (self->state.events[E_TLSDATE],
+                               EV_TIMEOUT, NULL));
+}
 TEST_HARNESS_MAIN

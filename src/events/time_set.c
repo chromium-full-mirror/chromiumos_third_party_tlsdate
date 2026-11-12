@@ -27,6 +27,54 @@
 #include "src/tlsdate.h"
 #include "src/util.h"
 
+/* Returns 1 if a sync start time is recorded and the elapsed CLOCK_BOOTTIME
+ * duration since then exceeds MAX_SYNC_DURATION_MS, otherwise 0. If
+ * |elapsed_ms_out| is non-NULL, populates it with the elapsed duration in ms.
+ */
+int
+check_sync_duration (const struct state *state, long long *elapsed_ms_out)
+{
+  struct timespec now;
+  long long elapsed_ms;
+
+  if (state->last_sync_start.tv_sec == 0 &&
+      state->last_sync_start.tv_nsec == 0)
+    return 0;
+  if (clock_gettime (CLOCK_BOOTTIME, &now) < 0)
+    {
+      perror ("[event:%s] clock_gettime(CLOCK_BOOTTIME) failed", __func__);
+      return 0;
+    }
+  elapsed_ms =
+      ((long long) (now.tv_sec - state->last_sync_start.tv_sec) *
+       1000000000LL +
+       (now.tv_nsec - state->last_sync_start.tv_nsec)) / 1000000LL;
+  if (elapsed_ms_out)
+    *elapsed_ms_out = elapsed_ms;
+  return elapsed_ms > MAX_SYNC_DURATION_MS;
+}
+
+void
+reset_and_retrigger_sync (struct state *state)
+{
+  state->last_sync_start.tv_sec = 0;
+  state->last_sync_start.tv_nsec = 0;
+  if (state->events[E_TLSDATE_TIMEOUT])
+    event_del (state->events[E_TLSDATE_TIMEOUT]);
+  if (state->tlsdate_pid)
+    {
+      kill (state->tlsdate_pid, SIGKILL);
+      IGNORE_EINTR (waitpid (state->tlsdate_pid, NULL, 0));
+      state->tlsdate_pid = 0;
+    }
+  state->running = 0;
+  state->tries = 0;
+  state->backoff = state->opts.wait_between_tries;
+  state->clock_delta = 0;
+  invalidate_time (state);
+  action_kickoff_time_sync (-1, EV_TIMEOUT, state);
+}
+
 void
 handle_time_setter (struct state *state, int status)
 {
@@ -45,6 +93,19 @@ handle_time_setter (struct state *state, int status)
             __func__, sync_type_str (state->last_sync_type), state->last_time);
       if (state->last_sync_type == SYNC_TYPE_NET)
         {
+          long long elapsed_ms = 0;
+          int exceeded = !state->exitting &&
+                         check_sync_duration (state, &elapsed_ms);
+          state->last_sync_start.tv_sec = 0;
+          state->last_sync_start.tv_nsec = 0;
+          if (exceeded)
+            {
+              info ("[event:%s] network time sync took %lld ms (> %d ms); "
+                    "re-triggering sync",
+                    __func__, elapsed_ms, MAX_SYNC_DURATION_MS);
+              reset_and_retrigger_sync (state);
+              break;
+            }
           /* Update the delta so it doesn't fire again immediately. */
           state->clock_delta = 0;
           check_continuity (&state->clock_delta);

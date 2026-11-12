@@ -7,6 +7,7 @@
 
 #include "config.h"
 
+#include <time.h>
 #include <event2/event.h>
 
 #include "src/conf.h"
@@ -63,6 +64,12 @@ void action_run_tlsdate (evutil_socket_t fd, short what, void *arg)
                  state->opts.subprocess_wait_between_tries);
   /* Add the response listener event */
   trigger_event (state, E_TLSDATE_STATUS, -1);
+  if (clock_gettime (CLOCK_BOOTTIME, &state->last_sync_start) < 0)
+    {
+      perror ("[event:%s] clock_gettime(CLOCK_BOOTTIME) failed", __func__);
+      state->last_sync_start.tv_sec = 0;
+      state->last_sync_start.tv_nsec = 0;
+    }
   /* Fire off the child process now! */
   if (tlsdate (state))
     {

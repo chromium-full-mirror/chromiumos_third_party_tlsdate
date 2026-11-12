@@ -75,6 +75,15 @@ action_tlsdate_status (evutil_socket_t fd, short what, void *arg)
     }
   if (is_sane_time (t))
     {
+      long long elapsed_ms = 0;
+      if (check_sync_duration (state, &elapsed_ms))
+        {
+          info ("[event:%s] tlsdate response took %lld ms (> %d ms); "
+                "discarding and re-triggering sync",
+                __func__, elapsed_ms, MAX_SYNC_DURATION_MS);
+          reset_and_retrigger_sync (state);
+          return;
+        }
       /* Note that last_time is from an online source */
       state->last_sync_type = SYNC_TYPE_NET;
       state->last_time = t;
@@ -82,6 +91,8 @@ action_tlsdate_status (evutil_socket_t fd, short what, void *arg)
     }
   else
     {
+      state->last_sync_start.tv_sec = 0;
+      state->last_sync_start.tv_nsec = 0;
       error ("[event:%s] invalid time received from tlsdate: %ld",
              __func__, t);
     }
